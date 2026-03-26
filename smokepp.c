@@ -6,14 +6,18 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <curses.h>
+#include <stdio.h>
 #include <signal.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <termios.h>
+#include <sys/ioctl.h>
 #include "smokepp.h"
 
 static int	g_mode_all;
+static int	g_rows;
+static int	g_cols;
 
 typedef struct s_smoke
 {
@@ -32,9 +36,49 @@ typedef struct s_ash
 	int	active;
 }	t_ash;
 
-static t_smoke	g_smk[MAX_SMOKE];
-static t_ash	g_ash;
-static int		g_frame;
+static t_smoke			g_smk[MAX_SMOKE];
+static t_ash			g_ash;
+static int				g_frame;
+static struct termios	g_orig_term;
+
+/*
+** Terminal helpers using ANSI escape sequences.
+*/
+static void	term_move(int y, int x)
+{
+	printf("\033[%d;%dH", y + 1, x + 1);
+}
+
+static void	term_clear(void)
+{
+	printf("\033[2J");
+}
+
+static void	term_color_on(void)
+{
+	printf("\033[31m");
+}
+
+static void	term_color_off(void)
+{
+	printf("\033[0m");
+}
+
+static void	get_term_size(void)
+{
+	struct winsize	ws;
+
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0)
+	{
+		g_rows = ws.ws_row;
+		g_cols = ws.ws_col;
+	}
+	else
+	{
+		g_rows = 24;
+		g_cols = 80;
+	}
+}
 
 /*
 ** Returns the character to draw for a smoke particle at a given age.
@@ -60,16 +104,19 @@ static char	smoke_char(int age)
 }
 
 /*
-** Safe mvaddch: only draw if within terminal bounds.
+** Safe putchar at position: only draw if within terminal bounds.
 */
 static void	safe_addch(int y, int x, char c)
 {
-	if (y >= 0 && y < LINES && x >= 0 && x < COLS)
-		mvaddch(y, x, c);
+	if (y >= 0 && y < g_rows && x >= 0 && x < g_cols)
+	{
+		term_move(y, x);
+		putchar(c);
+	}
 }
 
 /*
-** Safe mvaddstr: draw string, skipping out-of-bounds positions.
+** Safe string draw, skipping out-of-bounds positions.
 */
 static void	my_mvaddstr(int y, int x, const char *s)
 {
@@ -246,22 +293,33 @@ static void	drop_ash(int cy, int cx)
 }
 
 /*
-** Initialize ncurses with colors if available.
+** Set terminal to raw mode (no echo, no canonical, no blocking).
 */
 static void	init_display(void)
 {
-	initscr();
-	noecho();
-	curs_set(0);
-	nodelay(stdscr, TRUE);
-	leaveok(stdscr, TRUE);
-	scrollok(stdscr, FALSE);
-	if (has_colors())
-	{
-		start_color();
-		init_pair(1, COLOR_RED, COLOR_BLACK);
-		init_pair(2, COLOR_YELLOW, COLOR_BLACK);
-	}
+	struct termios	raw;
+
+	tcgetattr(STDIN_FILENO, &g_orig_term);
+	raw = g_orig_term;
+	raw.c_lflag &= ~(ECHO | ICANON);
+	raw.c_cc[VMIN] = 0;
+	raw.c_cc[VTIME] = 0;
+	tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+	printf("\033[?25l");
+	get_term_size();
+}
+
+/*
+** Restore terminal to original state.
+*/
+static void	cleanup_display(void)
+{
+	printf("\033[0m");
+	printf("\033[?25h");
+	term_clear();
+	term_move(0, 0);
+	fflush(stdout);
+	tcsetattr(STDIN_FILENO, TCSAFLUSH, &g_orig_term);
 }
 
 /*
@@ -312,21 +370,19 @@ int	main(int argc, char *argv[])
 	if (g_mode_all)
 		signal(SIGINT, SIG_IGN);
 	init_display();
-	cy = LINES * 2 / 3;
+	cy = g_rows * 2 / 3;
 	total = EMBER_W + PAPER_INIT + FILTER_W + 2;
-	right_edge = (COLS + total) / 2;
+	right_edge = (g_cols + total) / 2;
 	/* Main burn loop */
 	while (paper_len > 0)
 	{
-		erase();
+		term_clear();
 		total = EMBER_W + paper_len + FILTER_W + 2;
 		cx = right_edge - total;
 		/* Draw cigarette with colored ember */
-		if (has_colors())
-			attron(COLOR_PAIR(1));
+		term_color_on();
 		draw_cigarette(cy, cx, paper_len);
-		if (has_colors())
-			attroff(COLOR_PAIR(1));
+		term_color_off();
 		/* Spawn smoke above the ember */
 		sx = cx + 1 + (g_frame % 3) - 1;
 		spawn_smoke(cy - 1, sx);
@@ -340,8 +396,7 @@ int	main(int argc, char *argv[])
 			paper_len--;
 			drop_ash(cy, cx);
 		}
-		refresh();
-		getch();
+		fflush(stdout);
 		usleep(FRAME_US);
 		g_frame++;
 	}
@@ -350,16 +405,15 @@ int	main(int argc, char *argv[])
 	i = 0;
 	while (i < stub_frames)
 	{
-		erase();
+		term_clear();
 		draw_stub(cy, cx);
 		update_and_draw_smoke();
 		update_ash();
-		refresh();
-		getch();
+		fflush(stdout);
 		usleep(FRAME_US);
 		g_frame++;
 		i++;
 	}
-	endwin();
+	cleanup_display();
 	return (0);
 }

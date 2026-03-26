@@ -2,26 +2,26 @@ NAME = smoke++
 
 CC = gcc
 CFLAGS = -O2 -Wall -Wextra
-LDFLAGS = -lncurses
-
 SRC = smokepp.c
 HDR = smokepp.h
 
 all: $(NAME)
 
 $(NAME): $(SRC) $(HDR)
-	$(CC) $(CFLAGS) -o '$(NAME)' $(SRC) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o '$(NAME)' $(SRC)
 
 clean:
 	rm -f '$(NAME)'
 
 re: clean all
 
-install: $(NAME)
-	install -d /usr/local/bin
-	install -m 755 '$(NAME)' /usr/local/bin/'$(NAME)'
+setup: $(NAME)
+	@if grep -q 'smokepp' $$HOME/.zshrc 2>/dev/null; then \
+		echo "PATH already configured in ~/.zshrc"; \
+	else \
+		echo 'export PATH="$$PATH:$(CURDIR)"' >> $$HOME/.zshrc; \
+		echo "Added $(CURDIR) to PATH in ~/.zshrc"; \
+		echo "Run: source ~/.zshrc"; \
+	fi
 
-uninstall:
-	rm -f /usr/local/bin/'$(NAME)'
-
-.PHONY: all clean re install uninstall
+.PHONY: all clean re setup
