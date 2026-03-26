@@ -29,4 +29,4 @@ smoke++ --addict     # same as -a
 | Flag | Description |
 |------|-------------|
 | (none) | Quick mode. Burns for ~10 seconds. |
-| `-a`, `--addict` | Full burn mode. Burns for ~2.5 minutes. **Cannot be interrupted with Ctrl+C.** You must watch it burn. To force quit: `kill smoke++` in another terminal. |
+| `-a`, `--addict` | Full burn mode. Burns for ~2.5 minutes. **Cannot be interrupted with Ctrl+C.** You must watch it burn. To force quit: `killall 'smoke++'` in another terminal. |
