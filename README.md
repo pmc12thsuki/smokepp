@@ -19,8 +19,9 @@ source ~/.zshrc
 ## Usage
 
 ```
-smoke++          # quick smoke (~10 sec)
-smoke++ -all     # full smoke (~2.5 min)
+smoke++              # quick smoke (~10 sec)
+smoke++ -a           # full smoke (~2.5 min)
+smoke++ --addict     # same as -a
 ```
 
 ## Flags
@@ -28,4 +29,4 @@ smoke++ -all     # full smoke (~2.5 min)
 | Flag | Description |
 |------|-------------|
 | (none) | Quick mode. Burns for ~10 seconds. |
-| `-all` | Full burn mode. Burns for ~2.5 minutes. **Cannot be interrupted with Ctrl+C.** You must watch it burn. To force quit: `kill smoke++` in another terminal. |
+| `-a`, `--addict` | Full burn mode. Burns for ~2.5 minutes. **Cannot be interrupted with Ctrl+C.** You must watch it burn. To force quit: `kill smoke++` in another terminal. |

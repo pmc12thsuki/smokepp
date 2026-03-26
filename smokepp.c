@@ -324,7 +324,7 @@ static void	cleanup_display(void)
 
 /*
 ** Parse arguments. Returns 0 on success, 1 on error.
-** -all : full burn mode (~2.5 min, SIGINT ignored)
+** -a / --addict : full burn mode (~2.5 min, SIGINT ignored)
 */
 static int	parse_args(int argc, char *argv[])
 {
@@ -334,11 +334,13 @@ static int	parse_args(int argc, char *argv[])
 	i = 1;
 	while (i < argc)
 	{
-		if (strcmp(argv[i], "-all") == 0)
+		if (strcmp(argv[i], "-a") == 0
+			|| strcmp(argv[i], "--addict") == 0)
 			g_mode_all = 1;
 		else
 		{
-			write(STDERR_FILENO, "Usage: smoke++ [-all]\n", 21);
+			write(STDERR_FILENO,
+				"Usage: smoke++ [-a | --addict]\n", 30);
 			return (1);
 		}
 		i++;
