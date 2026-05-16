@@ -1,7 +1,7 @@
 NAME = smoke++
 
 CC = gcc
-CFLAGS = -O2 -Wall -Wextra
+CFLAGS = -O2 -Wall -Wextra -Wno-unused-result
 SRC = smokepp.c
 HDR = smokepp.h
 
