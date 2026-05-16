@@ -1,7 +1,7 @@
 /* ************************************************************************** */
 /*                                                                            */
 /*   smokepp.c - A burning cigarette for your terminal                        */
-/*   Usage: smoke++ [-all]                                                    */
+/*   Usage: smoke++ [-a|--addict] [-c|--coffee] [-w|--winston]                 */
 /*   Inspired by sl(1) by Toyoda Masashi                                      */
 /*                                                                            */
 /* ************************************************************************** */
@@ -16,6 +16,8 @@
 #include "smokepp.h"
 
 static int	g_mode_all;
+static int	g_mode_coffee;
+static int	g_mode_winston;
 static int	g_rows;
 static int	g_cols;
 
@@ -26,6 +28,7 @@ typedef struct s_smoke
 	int	age;
 	int	seed;
 	int	alive;
+	int	slow;
 }	t_smoke;
 
 typedef struct s_ash
@@ -62,6 +65,11 @@ static void	term_color_on(void)
 static void	term_color_off(void)
 {
 	printf("\033[0m");
+}
+
+static void	term_coffee_on(void)
+{
+	printf("%s", CUP_COLOR);
 }
 
 static void	get_term_size(void)
@@ -131,9 +139,10 @@ static void	my_mvaddstr(int y, int x, const char *s)
 }
 
 /*
-** Spawn a new smoke particle at position (y, x).
+** Spawn a new particle at (y, x). slow=1 makes it rise lazily
+** (coffee steam); slow=0 is normal cigarette smoke.
 */
-static void	spawn_smoke(int y, int x)
+static void	spawn_smoke(int y, int x, int slow)
 {
 	int	i;
 
@@ -147,6 +156,7 @@ static void	spawn_smoke(int y, int x)
 			g_smk[i].age = 0;
 			g_smk[i].seed = g_frame + i;
 			g_smk[i].alive = 1;
+			g_smk[i].slow = slow;
 			return ;
 		}
 		i++;
@@ -176,8 +186,13 @@ static void	update_and_draw_smoke(void)
 			g_smk[i].alive = 0;
 			continue ;
 		}
-		/* Rise: fast when young, slower when old */
-		if (g_smk[i].age < 8 || g_smk[i].age % 2 == 0)
+		/* Rise: cigarette smoke is brisk; coffee steam drifts up lazily */
+		if (g_smk[i].slow)
+		{
+			if (g_smk[i].age % 4 == 0)
+				g_smk[i].y--;
+		}
+		else if (g_smk[i].age < 8 || g_smk[i].age % 2 == 0)
 			g_smk[i].y--;
 		/* Lateral drift: each particle has its own rhythm */
 		drift_period = 3 + (g_smk[i].seed % 3);
@@ -205,8 +220,12 @@ static void	draw_cigarette(int cy, int cx, int paper_len)
 	int			total;
 	int			i;
 	const char	*ember;
+	const char	*brand;
 
-	total = EMBER_W + paper_len + FILTER_W;
+	brand = g_mode_winston ? BRAND_WINSTON : FILTER_FILL;
+	/* +1 accounts for the '|' separator between paper and filter, so the
+	** full FILTER_W-wide brand is not clipped by the right border. */
+	total = EMBER_W + paper_len + FILTER_W + 1;
 	/* Top border */
 	safe_addch(cy, cx, ',');
 	i = -1;
@@ -225,11 +244,13 @@ static void	draw_cigarette(int cy, int cx, int paper_len)
 	i = -1;
 	while (++i < paper_len)
 		safe_addch(cy + 1, cx + 1 + EMBER_W + i, ' ');
-	/* Separator and filter */
+	/* Separator and filter (brand printed on the cork in winston mode) */
 	safe_addch(cy + 1, cx + 1 + EMBER_W + paper_len, '|');
-	i = -1;
-	while (++i < FILTER_W)
-		safe_addch(cy + 1, cx + 2 + EMBER_W + paper_len + i, '#');
+	if (g_mode_winston)
+		printf("\033[1;31m");
+	my_mvaddstr(cy + 1, cx + 2 + EMBER_W + paper_len, brand);
+	if (g_mode_winston)
+		printf("\033[31m");
 	safe_addch(cy + 1, cx + total + 1, '|');
 	/* Bottom border */
 	safe_addch(cy + 2, cx, '`');
@@ -244,23 +265,56 @@ static void	draw_cigarette(int cy, int cx, int paper_len)
 */
 static void	draw_stub(int cy, int cx)
 {
-	int	i;
+	int			i;
+	const char	*brand;
 
+	brand = g_mode_winston ? BRAND_WINSTON : FILTER_FILL;
 	safe_addch(cy, cx, ',');
 	i = -1;
 	while (++i < FILTER_W)
 		safe_addch(cy, cx + 1 + i, '-');
 	safe_addch(cy, cx + FILTER_W + 1, '.');
 	safe_addch(cy + 1, cx, '|');
-	i = -1;
-	while (++i < FILTER_W)
-		safe_addch(cy + 1, cx + 1 + i, '#');
+	if (g_mode_winston)
+		printf("\033[1;31m");
+	my_mvaddstr(cy + 1, cx + 1, brand);
+	if (g_mode_winston)
+		printf("\033[0m");
 	safe_addch(cy + 1, cx + FILTER_W + 1, '|');
 	safe_addch(cy + 2, cx, '`');
 	i = -1;
 	while (++i < FILTER_W)
 		safe_addch(cy + 2, cx + 1 + i, '-');
 	safe_addch(cy + 2, cx + FILTER_W + 1, '\'');
+}
+
+/*
+** Draw the coffee cup with `level` interior rows of coffee, filled from
+** the bottom (0 = empty, CUP_H = full). Steam reuses the smoke particle
+** system, spawned above the cup mouth by the caller.
+*/
+static void	draw_coffee(int cy, int cx, int level)
+{
+	int	r;
+	int	filled;
+
+	my_mvaddstr(cy, cx, CUP_TOP);
+	r = -1;
+	while (++r < CUP_H)
+	{
+		filled = (r >= CUP_H - level);
+		my_mvaddstr(cy + 1 + r, cx, " |");
+		if (filled)
+		{
+			term_coffee_on();
+			my_mvaddstr(cy + 1 + r, cx + 2, CUP_LIQ);
+			term_color_off();
+		}
+		else
+			my_mvaddstr(cy + 1 + r, cx + 2, CUP_EMPTY);
+		safe_addch(cy + 1 + r, cx + 8, '|');
+	}
+	my_mvaddstr(cy + 1 + CUP_H, cx, CUP_BOT);
 }
 
 /*
@@ -324,23 +378,32 @@ static void	cleanup_display(void)
 
 /*
 ** Parse arguments. Returns 0 on success, 1 on error.
-** -a / --addict : full burn mode (~2.5 min, SIGINT ignored)
+** -a / --addict  : full burn mode (~2.5 min, SIGINT ignored)
+** -c / --coffee  : add a steaming cup of coffee
+** -w / --winston : print the WINSTON brand on the filter
+** Flags are independent and may be combined.
 */
 static int	parse_args(int argc, char *argv[])
 {
-	int	i;
+	int			i;
+	const char	*usage;
 
+	usage = "Usage: smoke++ [-a|--addict] [-c|--coffee] [-w|--winston]\n";
 	g_mode_all = 0;
+	g_mode_coffee = 0;
+	g_mode_winston = 0;
 	i = 1;
 	while (i < argc)
 	{
-		if (strcmp(argv[i], "-a") == 0
-			|| strcmp(argv[i], "--addict") == 0)
+		if (strcmp(argv[i], "-a") == 0 || strcmp(argv[i], "--addict") == 0)
 			g_mode_all = 1;
+		else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--coffee") == 0)
+			g_mode_coffee = 1;
+		else if (strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--winston") == 0)
+			g_mode_winston = 1;
 		else
 		{
-			write(STDERR_FILENO,
-				"Usage: smoke++ [-a | --addict]\n", 30);
+			write(STDERR_FILENO, usage, strlen(usage));
 			return (1);
 		}
 		i++;
@@ -359,6 +422,8 @@ int	main(int argc, char *argv[])
 	int	sx;
 	int	burn_rate;
 	int	stub_frames;
+	int	cup_x;
+	int	cup_y;
 
 	if (parse_args(argc, argv))
 		return (1);
@@ -373,23 +438,33 @@ int	main(int argc, char *argv[])
 		signal(SIGINT, SIG_IGN);
 	init_display();
 	cy = g_rows * 2 / 3;
-	total = EMBER_W + PAPER_INIT + FILTER_W + 2;
+	total = EMBER_W + PAPER_INIT + FILTER_W + 3;
 	right_edge = (g_cols + total) / 2;
+	/* Coffee cup sits at a fixed spot left of the full cigarette */
+	cup_y = cy;
+	cup_x = (right_edge - total) - CUP_GAP - CUP_W;
 	/* Main burn loop */
 	while (paper_len > 0)
 	{
 		term_clear();
-		total = EMBER_W + paper_len + FILTER_W + 2;
+		total = EMBER_W + paper_len + FILTER_W + 3;
 		cx = right_edge - total;
 		/* Draw cigarette with colored ember */
 		term_color_on();
 		draw_cigarette(cy, cx, paper_len);
 		term_color_off();
+		if (g_mode_coffee)
+		{
+			draw_coffee(cup_y, cup_x,
+				(paper_len * CUP_H + PAPER_INIT - 1) / PAPER_INIT);
+			if (g_frame % 3 == 0)
+				spawn_smoke(cup_y - 1, cup_x + 3 + (g_frame % 2), 1);
+		}
 		/* Spawn smoke above the ember */
 		sx = cx + 1 + (g_frame % 3) - 1;
-		spawn_smoke(cy - 1, sx);
+		spawn_smoke(cy - 1, sx, 0);
 		if (g_frame % 2 == 0)
-			spawn_smoke(cy - 1, sx + 1);
+			spawn_smoke(cy - 1, sx + 1, 0);
 		update_and_draw_smoke();
 		update_ash();
 		/* Burn down the paper */
@@ -409,6 +484,12 @@ int	main(int argc, char *argv[])
 	{
 		term_clear();
 		draw_stub(cy, cx);
+		if (g_mode_coffee)
+		{
+			draw_coffee(cup_y, cup_x, 0);
+			if (g_frame % 3 == 0)
+				spawn_smoke(cup_y - 1, cup_x + 3 + (g_frame % 2), 1);
+		}
 		update_and_draw_smoke();
 		update_ash();
 		fflush(stdout);

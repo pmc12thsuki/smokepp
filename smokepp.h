@@ -13,6 +13,23 @@
 # define FILTER_W     7
 # define PAPER_INIT   36
 
+/* Filter print: both strings are exactly FILTER_W (7) chars wide */
+# define FILTER_FILL    "#######"
+# define BRAND_WINSTON  "WINSTON"
+
+/* Coffee cup (drawn to the left of the cigarette). Body 8 wide with
+** CUP_H interior rows; coffee (brown '~') fills from the bottom and the
+** level drops over time, in sync with the cigarette burning down.
+** No handle (a handle made it look like a beer mug). */
+# define CUP_W      8
+# define CUP_GAP    12
+# define CUP_H      4
+# define CUP_TOP    " .------. "
+# define CUP_BOT    " `------' "
+# define CUP_LIQ    "~~~~~~"
+# define CUP_EMPTY  "      "
+# define CUP_COLOR  "\033[38;5;130m"
+
 /* Animation timing */
 # define FRAME_US     40000   /* 40ms per frame, ~25fps */
 # define BURN_RATE_FAST 7     /* ~10 sec total (36 * 7 * 40ms) */
